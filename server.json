@@ -1,0 +1,95 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.forgeorbital/agent-gate",
+  "description": "Self-serve developer on-ramp to Forge Orbital: a local mandate gate and proof trail for AI agents that take consequential actions.",
+  "version": "0.1.0",
+  "websiteUrl": "https://forgeorbital.com/agent-gate",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "forge-agent-gate",
+      "version": "0.1.0",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "serve",
+          "description": "Run the risk-control MCP gateway over stdio."
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "FORGE_API_KEY",
+          "description": "Forge decision-API key (starts with fi_). Set this or FORGE_BEARER_TOKEN.",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "FORGE_BEARER_TOKEN",
+          "description": "Alternative to FORGE_API_KEY: a Forge bearer token for the decision API.",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "FORGE_API_BASE_URL",
+          "description": "Base URL of the Forge decision API. Defaults to the hosted Forge cloud.",
+          "format": "string",
+          "isRequired": false,
+          "default": "https://forgeorbital.com"
+        },
+        {
+          "name": "FORGE_TENANT_ID",
+          "description": "Tenant id stamped into every proof-trail record.",
+          "format": "string",
+          "isRequired": true
+        },
+        {
+          "name": "FORGE_RECORD_MODE",
+          "description": "required = fail-closed (block if Forge cannot record); best_effort = execute anyway.",
+          "format": "string",
+          "isRequired": false,
+          "default": "required"
+        },
+        {
+          "name": "AGENT_GATE_MANDATE_PATH",
+          "description": "Absolute path to the signed mandate (policy) JSON. Create it with `forge-agent-gate init`.",
+          "format": "string",
+          "isRequired": false
+        },
+        {
+          "name": "AGENT_GATE_KILL_FILE",
+          "description": "If this file exists, every gated write is hard-blocked (master kill switch).",
+          "format": "string",
+          "isRequired": false
+        },
+        {
+          "name": "KALSHI_API_KEY_ID",
+          "description": "Kalshi API key id. Only for the live Kalshi venue adapter; stays on your machine.",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "KALSHI_PRIVATE_KEY_PATH",
+          "description": "Path to your Kalshi RSA private key. Only for the Kalshi venue adapter.",
+          "format": "string",
+          "isRequired": false,
+          "default": "./kalshi_private_key.pem"
+        },
+        {
+          "name": "KALSHI_ENV",
+          "description": "Kalshi environment: demo or prod. Only for the Kalshi venue adapter.",
+          "format": "string",
+          "isRequired": false,
+          "default": "demo"
+        }
+      ]
+    }
+  ]
+}

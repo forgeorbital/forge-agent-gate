@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.test-build/
+coverage/
+*.log
+
+# Local secrets and operator state — never commit
+.env
+.env.local
+*.pem
+*.key
+mandate.json
+mandate.*.json
+.forge-agent-gate.kill
+.forge-agent-gate/

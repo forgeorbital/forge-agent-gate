@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "mandateId": "trading-preset-example",
+  "createdAt": "2026-07-09T00:00:00.000Z",
+  "allowedActionTypes": ["trade"],
+  "counterpartyAllowlist": [],
+  "counterpartyDenylist": [],
+  "resourceAllowlist": ["kalshi"],
+  "resourceDenylist": [],
+  "maxSingleActionUsd": 100,
+  "maxDailyTotalUsd": 1000,
+  "perActionType": { "trade": { "maxSingleActionUsd": 100 } },
+  "allowedHours": null,
+  "humanApprovalThresholdUsd": 250,
+  "requireApprovalForNewCounterparty": false,
+  "rateLimit": { "maxActions": 30, "windowSeconds": 60 },
+  "killSwitch": false
+}

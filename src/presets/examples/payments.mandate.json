@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "mandateId": "payments-preset-example",
+  "createdAt": "2026-07-09T00:00:00.000Z",
+  "allowedActionTypes": ["transfer", "spend"],
+  "counterpartyAllowlist": [],
+  "counterpartyDenylist": ["sanctioned-entity-1"],
+  "resourceAllowlist": [],
+  "resourceDenylist": [],
+  "maxSingleActionUsd": 5000,
+  "maxDailyTotalUsd": 25000,
+  "perActionType": {},
+  "allowedHours": {
+    "tz": "America/New_York",
+    "windows": [{ "days": [1, 2, 3, 4, 5], "start": "08:00", "end": "18:00" }]
+  },
+  "humanApprovalThresholdUsd": 2500,
+  "requireApprovalForNewCounterparty": true,
+  "rateLimit": { "maxActions": 20, "windowSeconds": 60 },
+  "killSwitch": false
+}

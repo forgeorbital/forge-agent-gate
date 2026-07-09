@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "mandateId": "refunds-preset-example",
+  "createdAt": "2026-07-09T00:00:00.000Z",
+  "allowedActionTypes": ["refund"],
+  "counterpartyAllowlist": [],
+  "counterpartyDenylist": [],
+  "resourceAllowlist": [],
+  "resourceDenylist": [],
+  "maxSingleActionUsd": 2000,
+  "maxDailyTotalUsd": 5000,
+  "perActionType": { "refund": { "humanApprovalThresholdUsd": 100 } },
+  "allowedHours": null,
+  "humanApprovalThresholdUsd": 100,
+  "requireApprovalForNewCounterparty": false,
+  "rateLimit": { "maxActions": 60, "windowSeconds": 60 },
+  "killSwitch": false
+}
