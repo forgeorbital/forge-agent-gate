@@ -1,6 +1,6 @@
 {
   "name": "forge-agent-gate",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Self-serve developer on-ramp to Forge Orbital: a local, deterministic mandate gate for AI agents that take consequential actions. Every allow and block is sent to Forge for a verifiable proof trail.",
   "type": "module",
   "license": "MIT",
