@@ -16,18 +16,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node 24 ships npm 11.x, which supports trusted publishing (needs >= 11.5.1)
+      # and has the bundled sigstore deps required for provenance. Do NOT
+      # `npm i -g npm@latest` over the toolcache: it breaks provenance.js.
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
-      # Trusted publishing (OIDC) requires npm >= 11.5.1
-      - name: Upgrade npm
-        run: npm install -g npm@latest
+      - name: Versions
+        run: node -v && npm -v
 
       - name: Install deps
         run: npm ci
 
-      # prepublishOnly runs build + test. No NODE_AUTH_TOKEN: OIDC supplies identity.
+      # prepublishOnly runs build + test. OIDC supplies identity, no token.
       - name: Publish
         run: npm publish --access public
