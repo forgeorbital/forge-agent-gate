@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "com.forgeorbital/agent-gate",
-  "description": "Self-serve developer on-ramp to Forge Orbital: a local mandate gate and proof trail for AI agents that take consequential actions.",
+  "description": "Local mandate gate and proof trail for AI agents that take consequential actions.",
   "version": "0.1.0",
   "websiteUrl": "https://forgeorbital.com/agent-gate",
   "packages": [
