@@ -9,8 +9,8 @@
  * record cannot be written, the gate converts an allow into a block.
  *
  * The request shape matches the Forge `AgenticEventRequest` contract exactly
- * (see docs/openapi.latest.json → components.schemas.AgenticEventRequest and
- * core/decision_engine/agentic_event_packet.py in the Forge repo).
+ * (see the public OpenAPI schema: docs/openapi.latest.json →
+ * components.schemas.AgenticEventRequest).
  */
 
 import { sha256HexOfJson } from "./canonical.js";
@@ -18,6 +18,24 @@ import type { Mandate } from "./mandate.js";
 import type { Decision } from "./types.js";
 import type { ProposedOrder } from "./venues/types.js";
 import { orderNotionalUsd } from "./enforce.js";
+import { createRequire } from "node:module";
+
+// Client version for the outbound User-Agent, read from package.json at load
+// time so it never drifts from the published version. The published layout
+// puts this file at dist/forge.js (../package.json); the test build nests it
+// deeper, so fall back one more level rather than break the build.
+function resolveClientVersion(): string {
+  const req = createRequire(import.meta.url);
+  for (const rel of ["../package.json", "../../package.json"]) {
+    try {
+      return (req(rel) as { version: string }).version;
+    } catch {
+      // try the next candidate layout
+    }
+  }
+  return "0.0.0";
+}
+const CLIENT_VERSION: string = resolveClientVersion();
 
 export type RecordMode = "required" | "best_effort";
 
@@ -240,7 +258,7 @@ export async function postAgenticEvent(
   const headers: Record<string, string> = {
     "content-type": "application/json",
     accept: "application/json",
-    "user-agent": "forge-agent-gate/0.1.0",
+    "user-agent": `forge-agent-gate/${CLIENT_VERSION}`,
   };
   if (config.apiKey) headers["x-api-key"] = config.apiKey;
   else if (config.bearerToken) headers["authorization"] = `Bearer ${config.bearerToken}`;
