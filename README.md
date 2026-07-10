@@ -367,8 +367,7 @@ Each decision is posted to `POST /v1/agentic/events/evaluate` with header
 ```
 
 Forge returns a proof-trail result with a record id and signature; the gateway
-attaches that verification summary to the tool result. (Field shapes match the Forge `AgenticEventRequest` contract in the public
-`docs/openapi.latest.json` schema.)
+attaches that verification summary to the tool result. (Field shapes match the Forge `AgenticEventRequest` contract in the Forge API OpenAPI schema.)
 
 ## Kalshi auth
 

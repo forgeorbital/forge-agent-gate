@@ -69,9 +69,6 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0"
   },
-  "optionalDependencies": {
-    "pmxtjs": "0.1.2"
-  },
   "devDependencies": {
     "@types/node": "20.19.43",
     "typescript": "5.9.3"
