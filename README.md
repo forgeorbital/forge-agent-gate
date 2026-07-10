@@ -1,5 +1,7 @@
 # forge-agent-gate
 
+[![forge-agent-gate MCP server](https://glama.ai/mcp/servers/forgeorbital/forge-agent-gate/badges/score.svg)](https://glama.ai/mcp/servers/forgeorbital/forge-agent-gate)
+
 Product page: https://forgeorbital.com/agent-gate
 Live demo: https://forgeorbital.com/agent-gate/demo
 Get an early-access API key: https://forgeorbital.com/agent-gate/pricing
