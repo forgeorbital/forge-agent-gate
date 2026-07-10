@@ -15,7 +15,7 @@ Forge's AI decision engine has been federally evaluated, and the Forge solution 
 
 `forge-agent-gate` is a **local, deterministic mandate gate + proof trail** for AI
 agents that take economically consequential actions (spend, transfer, approve,
-refund, procure, submit, escalate, and - as the first fully-wired vertical - trade on prediction-market venues). The agent proposes an action; the gateway
+refund, procure, submit, escalate, and, as the first fully-wired vertical, trade on prediction-market venues). The agent proposes an action; the gateway
 allows, blocks, or escalates it against a signed policy you control, then records
 every decision to Forge for a replayable proof trail. It is **not** a broker,
 never takes custody of funds, and never sends venue keys off the local machine.
@@ -89,10 +89,125 @@ Prints the active mandate id, signature validity, and kill-switch state.
 
 ## MCP tools exposed
 
-- `get_markets`, `get_market`, `get_positions`, `gate_status` - read-only.
-- `place_order`, `cancel_order` - **write, gated**: enforced against the mandate,
-  recorded to Forge, and executed only on an `allow`. A blocked or escalated
-  write is returned as a tool error so it cannot be mistaken for a fill.
+The generic tool works for every action type. The trading tools only appear when a
+trading mandate and a venue adapter are configured.
+
+- `gate_action` - **the one you want.** Checks a single consequential action
+  (`spend`, `transfer`, `approve`, `refund`, `procure`, `submit`, `trade`,
+  `escalate`, `isolate`, `custom`) against the signed mandate, records the Forge
+  proof trail, and returns `allow`, `escalate`, or `block`. It never executes the
+  action; your code does that only on `allow`.
+- `gate_status` - read-only: active mandate id, signature validity, kill-switch state.
+- `get_markets`, `get_market`, `get_positions` - read-only, trading vertical only.
+- `place_order`, `cancel_order` - **write, gated**, trading vertical only: enforced
+  against the mandate, recorded to Forge, and executed only on an `allow`. A blocked
+  or escalated write is returned as a tool error so it cannot be mistaken for a fill.
+
+`gate_action` input: `actionType` (required) plus any of `amountUsd`, `counterparty`,
+`resource`, `dailyTotalUsd`, `knownCounterparties`, `metadata`. Put no credentials in
+`metadata`.
+
+## Integrating in code instead of MCP
+
+```ts
+import { generic, presets, type ForgeConfig } from "forge-agent-gate";
+
+const forgeConfig: ForgeConfig = {
+  baseUrl: process.env.FORGE_BASE_URL ?? "https://forgeorbital.com",
+  apiKey: process.env.FORGE_API_KEY,   // fi_...
+  recordMode: "required",              // or "best_effort"
+  tenantId: "acme",
+  agentId: "refund-agent",             // one stable id per monitored workflow
+};
+
+const mandate = presets.refundsPresetMandate({ autoApproveCeilingUsd: 100 });
+const action = { actionType: "refund" as const, amountUsd: 4200, counterparty: "cust-123" };
+
+const decision = generic.enforceAction({
+  mandate,
+  action,
+  activity: { dailyTotalUsd: 0, knownCounterparties: [] },
+  now: new Date(),
+});
+// decision.disposition is "allow" | "escalate" | "block"  (there is no "hold")
+
+await generic.recordGenericAction(forgeConfig, mandate, action, decision);
+
+if (decision.disposition === "allow") {
+  await issueRefund(action);   // your code. Only ever on allow.
+}
+```
+
+Check what your key is doing at any time:
+
+```bash
+curl -H "X-API-Key: $FORGE_API_KEY" https://forgeorbital.com/v1/agent-gate/me
+```
+
+Returns your plan, agent workflows, trace credits used and remaining, and the recent
+allow / escalate / block mix.
+
+## Ask an LLM to wire it up
+
+If you would rather not read any of this, paste the block below into your coding
+assistant, together with the file that takes the risky action. It contains the whole
+contract, so the model does not have to guess.
+
+```text
+I want to add Forge Agent Gate to my AI agent so a human approves the risky actions
+and every decision leaves a verifiable Forge proof trail. Wire it into the code I give you.
+
+Package: forge-agent-gate (npm, Node >= 18.17).  Install: npm i forge-agent-gate
+
+Import:  import { generic, presets, type ForgeConfig } from "forge-agent-gate";
+
+Config (all fields required except the optional ones):
+  ForgeConfig = {
+    baseUrl: string,            // "https://forgeorbital.com"
+    apiKey?: string,            // "fi_..." Forge API key  (or bearerToken)
+    bearerToken?: string,
+    recordMode: "required" | "best_effort",
+    tenantId: string,
+    agentId: string,            // ONE stable id per monitored workflow, reused forever
+    agentVersion?: string,
+    timeoutMs?: number,
+  }
+
+Mandate presets (pick one, or build a PolicyMandate by hand):
+  presets.refundsPresetMandate({ autoApproveCeilingUsd })
+  presets.paymentsPresetMandate({ maxSingleTransferUsd })
+  presets.tradingPresetMandate({ ... })
+
+The two calls:
+  const decision = generic.enforceAction({ mandate, action, activity, now });
+  await generic.recordGenericAction(forgeConfig, mandate, action, decision);
+
+action    = { actionType, amountUsd?, counterparty?, resource?, metadata? }
+actionType is one of: spend | transfer | approve | refund | procure | submit |
+                      trade | escalate | isolate | custom
+activity  = { dailyTotalUsd, knownCounterparties }
+
+decision.disposition is exactly one of: "allow" | "escalate" | "block".
+There is no "hold". Execute the real action ONLY when it is "allow".
+On "escalate", route to a human. On "block", do not execute and surface the reason.
+
+Rules you must follow when you write the code:
+  1. Call the gate BEFORE the action executes, never after.
+  2. Never auto-approve, retry past, or bypass an "escalate" or "block".
+  3. Never put secrets or credentials in action.metadata.
+  4. Reuse one stable agentId for the workflow; do not generate a new one per run.
+
+Errors the API can return, handle them:
+  402 agent_gate_trace_credits_exhausted   -> out of monthly trace credits
+  402 agent_gate_agent_cap_exceeded        -> too many distinct agentIds for the plan
+  402 agent_gate_action_not_in_plan        -> that actionType is not on this plan
+  403 agent_gate_agent_disabled            -> this agent was killed by its operator
+  422 agent_id is required                 -> agentId missing
+  429                                      -> rate limited, back off and retry
+
+Zero-code alternative: run it as an MCP server (npx -y forge-agent-gate init, then
+serve) and call the `gate_action` tool before any consequential tool call.
+```
 
 ## Safety note for the installing agent
 

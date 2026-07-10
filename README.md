@@ -4,6 +4,14 @@ Product page: https://forgeorbital.com/agent-gate
 Live demo: https://forgeorbital.com/agent-gate/demo
 Get an early-access API key: https://forgeorbital.com/agent-gate/pricing
 
+> Do not want to read the docs? Paste the prompt in
+> [`llms-install.md`](./llms-install.md#ask-an-llm-to-wire-it-up) into your
+> coding assistant with the file that spends, refunds, approves, procures, or
+> trades. It contains the whole contract.
+>
+> Prefer zero code? Run it as an MCP server and call the `gate_action` tool
+> before any consequential tool call.
+
 Agent Gate is the self-serve developer on-ramp to Forge Orbital.
 
 Forge Orbital is built for enterprise and federal AI accountability. Agent Gate is the developer on-ramp to the same engine, so you can start small and grow into the platform.
@@ -104,12 +112,22 @@ show the category is bigger than trading:
 | `refundsPresetMandate()` | refunds auto-approve below a ceiling, **escalate at/above it**; daily cap; hard cap |
 
 ```ts
-import { generic, presets } from "forge-agent-gate";
+import { generic, presets, type ForgeConfig } from "forge-agent-gate";
+
+// `npx forge-agent-gate init` writes this for you. In a service it is just config.
+const forgeConfig: ForgeConfig = {
+  baseUrl: process.env.FORGE_BASE_URL ?? "https://forgeorbital.com",
+  apiKey: process.env.FORGE_API_KEY,   // your fi_... Agent Gate key
+  recordMode: "required",              // or "best_effort"
+  tenantId: "acme",
+  agentId: "payments-agent",           // one stable id per monitored workflow
+};
 
 const mandate = presets.paymentsPresetMandate({ maxSingleTransferUsd: 5000 });
+const action = { actionType: "transfer" as const, amountUsd: 4200, counterparty: "acme-llc" };
 const decision = generic.enforceAction({
   mandate,
-  action: { actionType: "transfer", amountUsd: 4200, counterparty: "acme-llc" },
+  action,
   activity: { dailyTotalUsd: 0, knownCounterparties: [] },
   now: new Date(),
 });
@@ -139,8 +157,8 @@ npm run build
 ## Quickstart
 
 ```bash
-# 1. Interactive setup: Forge creds, venue creds, first signed mandate,
-#    and ready-to-paste MCP config for your local agent client.
+# 1. Interactive setup: Forge credentials, a signed mandate, and ready-to-paste
+#    MCP config for refunds, payments, procurement, approvals, security, or trading.
 npx forge-agent-gate init
 
 # 2. Inspect the active mandate and kill-switch state.
@@ -154,9 +172,19 @@ npx forge-agent-gate serve
 
 | File | Purpose |
 |------|---------|
-| `mandate.json` | your signed risk policy |
+| `mandate.json` | your signed policy mandate |
 | `mandate_signing_key.pem` | the Ed25519 key that signs the mandate - keep private |
-| `.env` | Forge + venue credentials |
+| `.env` | Forge credentials, mandate path, kill switch, and optional venue credentials |
+
+Your Forge key gates one monitored agent workflow. Reuse the same stable
+`agentId` for that workflow, run it repeatedly, and check usage any time:
+
+```bash
+curl -H "X-API-Key: $FORGE_API_KEY" https://forgeorbital.com/v1/agent-gate/me
+```
+
+Forge does not train on your customer data. The key is scoped to Agent Gate and
+records only the facts needed for the proof trail.
 
 ### MCP client config
 
@@ -175,7 +203,7 @@ MCP-compatible local agent client:
         "FORGE_RECORD_MODE": "required",
         "AGENT_GATE_MANDATE_PATH": "/abs/path/mandate.json",
         "AGENT_GATE_KILL_FILE": "/abs/path/.forge-agent-gate.kill",
-        "KALSHI_API_KEY_ID": "...",
+        "KALSHI_API_KEY_ID": "optional-for-trading",
         "KALSHI_PRIVATE_KEY_PATH": "/abs/path/kalshi_private_key.pem",
         "KALSHI_ENV": "demo"
       }
@@ -188,13 +216,15 @@ MCP-compatible local agent client:
 
 | Tool | Type | Behavior |
 |------|------|----------|
-| `get_markets`, `get_market`, `get_positions` | read | safe passthrough to the venue |
-| `place_order` | **write, gated** | enforce → record → execute only on `allow` |
-| `cancel_order` | **write, gated** | kill-switch + venue check → record → execute |
+| `gate_action` | **write-intent, generic** | checks refund/payment/procurement/approval/security/trade/custom actions against the signed mandate, records the Forge proof trail, and returns `allow`, `escalate`, or `block`. It never executes the action. |
 | `gate_status` | read | mandate summary + kill-switch state |
+| `get_markets`, `get_market`, `get_positions` | read | optional trading vertical only; safe passthrough to the venue |
+| `place_order` | **write, gated** | optional trading vertical only; enforce → record → execute only on `allow` |
+| `cancel_order` | **write, gated** | optional trading vertical only; kill-switch + venue check → record → execute |
 
-A blocked or escalated write is returned as a tool **error** so the agent cannot
-mistake it for a fill.
+For generic workflows, your system executes the action only after `gate_action`
+returns `allow`. For trading tools, a blocked or escalated write is returned as
+a tool **error** so the agent cannot mistake it for a fill.
 
 ## The mandate
 
@@ -265,15 +295,15 @@ Specific guarantees, all unit-tested (`npm test`):
 ## Trust model
 
 ```
-AI agent ──▶ MCP tool (place_order)
+AI agent ──▶ MCP tool (gate_action) or local SDK call
                  │
                  ▼
-         enforce()  ← LOCAL, deterministic, authoritative
+         enforceAction()  ← LOCAL, deterministic, authoritative
                  │  allow / block / escalate
                  ▼
   POST /v1/agentic/events/evaluate  ← Forge writes the proof trail
                  │
-         allow ──┴─▶ venue.placeOrder()   (execute)
+         allow ──┴─▶ your system may execute the action
    block/escalate ─▶ do nothing, return the reason + record id
 ```
 
@@ -285,8 +315,14 @@ AI agent ──▶ MCP tool (place_order)
 - **Keys stay local.** Venue private keys live only in this process. They are
   never logged and never sent to Forge. Only non-secret facts (venue, market,
   side, count, USD notional, plus a SHA-256 of the order) go into the record.
+- **Trading is a preset.** The Kalshi adapter wraps the same pattern around
+  `place_order` and `cancel_order`. The broader gate is action-agnostic.
 
 ### The exact Forge payload
+
+This example shows the trading preset. Refunds, payments, procurement,
+approvals, and security actions use the same `pre_action_gate` contract with
+their own `proposed_action`, policy checks, and non-secret provenance.
 
 Each decision is posted to `POST /v1/agentic/events/evaluate` with header
 `X-API-Key: fi_...` (or `Authorization: Bearer <jwt>`). Body:
@@ -294,7 +330,7 @@ Each decision is posted to `POST /v1/agentic/events/evaluate` with header
 ```jsonc
 {
   "agent_id": "trading-agent-prod-1",
-  "agent_version": "0.1.0",
+  "agent_version": "0.1.3",
   "tenant_id": "your-tenant",
   "client_id": "your-tenant",
   "integration_mode": "pre_action_gate",

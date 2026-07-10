@@ -2,19 +2,27 @@
 /**
  * forge-agent-gate CLI.
  *
- *   forge-agent-gate init     interactive setup: Forge creds, venue creds,
+ *   forge-agent-gate init     interactive setup: Forge creds, workflow preset,
  *                             first signed mandate, and ready-to-paste MCP
  *                             config for a local MCP-compatible agent client.
  *   forge-agent-gate status   print the active mandate + kill-switch state.
  *   forge-agent-gate serve    run the MCP server over stdio.
  */
 
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
 
 import { loadConfig } from "./config.js";
+import type { ActionType } from "./generic/action.js";
+import {
+  defaultPolicyMandate,
+  parsePolicyMandate,
+  signPolicyMandate,
+  verifyPolicyMandateSignature,
+  type PolicyMandate,
+} from "./generic/mandate.js";
 import { startMcpServer } from "./mcp.js";
 import {
   defaultMandate,
@@ -26,6 +34,7 @@ import {
   type Mandate,
   type TradingHours,
 } from "./mandate.js";
+import { paymentsPresetMandate, refundsPresetMandate } from "./presets/index.js";
 
 async function main(): Promise<void> {
   const command = process.argv[2] ?? "help";
@@ -72,13 +81,47 @@ function printHelp(): void {
 
 function runStatus(): void {
   const config = loadConfig();
+  const raw = readFileSync(config.mandatePath, "utf8");
+  const parsed = JSON.parse(raw) as Record<string, unknown>;
+  if (Array.isArray(parsed.allowedActionTypes)) {
+    const policy = parsePolicyMandate(raw);
+    const killEngaged = policy.killSwitch === true || existsSync(config.killFilePath);
+    console.log(
+      JSON.stringify(
+        {
+          mandatePath: config.mandatePath,
+          mandateKind: "generic",
+          mandateId: policy.mandateId,
+          signatureValid: verifyPolicyMandateSignature(policy),
+          killSwitchEngaged: killEngaged,
+          killFilePath: config.killFilePath,
+          recordMode: config.forge.recordMode,
+          forgeBaseUrl: config.forge.baseUrl,
+          allowedActionTypes: policy.allowedActionTypes.length
+            ? policy.allowedActionTypes
+            : "all supported action types",
+          limits: {
+            maxSingleActionUsd: policy.maxSingleActionUsd,
+            maxDailyTotalUsd: policy.maxDailyTotalUsd,
+            humanApprovalThresholdUsd: policy.humanApprovalThresholdUsd,
+            requireApprovalForNewCounterparty: policy.requireApprovalForNewCounterparty,
+            rateLimit: policy.rateLimit,
+          },
+          allowedHours: policy.allowedHours,
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
   const mandate = loadMandate(config.mandatePath);
-  const killEngaged =
-    mandate.killSwitch === true || existsSync(config.killFilePath);
+  const killEngaged = mandate.killSwitch === true || existsSync(config.killFilePath);
   console.log(
     JSON.stringify(
       {
         mandatePath: config.mandatePath,
+        mandateKind: "trading",
         mandateId: mandate.mandateId,
         signatureValid: verifyMandateSignature(mandate),
         killSwitchEngaged: killEngaged,
@@ -99,6 +142,18 @@ function runStatus(): void {
       2,
     ),
   );
+}
+
+type InitWorkflow = "refunds" | "payments" | "procurement" | "approvals" | "trading";
+
+function normalizeWorkflow(raw: string): InitWorkflow {
+  const value = raw.trim().toLowerCase();
+  if (["payment", "payments", "pay"].includes(value)) return "payments";
+  if (["refund", "refunds"].includes(value)) return "refunds";
+  if (["procure", "procurement", "purchase", "purchasing"].includes(value)) return "procurement";
+  if (["approval", "approvals", "approve"].includes(value)) return "approvals";
+  if (["trade", "trading", "kalshi"].includes(value)) return "trading";
+  return "refunds";
 }
 
 async function runInit(): Promise<void> {
@@ -130,7 +185,121 @@ async function runInit(): Promise<void> {
     const recordMode = (await askYesNo("Fail-closed record mode (block if Forge can't sign)?", true))
       ? "required"
       : "best_effort";
-    const agentId = await ask("Agent id (label for this agent)", "trading-agent-prod-1");
+    const workflow = normalizeWorkflow(
+      await ask("Workflow preset (refunds, payments, procurement, approvals, trading)", "refunds"),
+    );
+    const agentId = await ask("Agent id (label for this agent)", `${workflow}-agent-prod-1`);
+
+    if (workflow !== "trading") {
+      console.log("\n2) Generic mandate (no venue credentials needed)\n");
+      let policy: PolicyMandate;
+      if (workflow === "refunds") {
+        const ceiling = await askNum("Auto-approve refunds below (USD)", 100);
+        const hardCap = await askNum("Hard block any refund above (USD)", 2000);
+        const daily = await askNum("Max daily refund total (USD)", 5000);
+        policy = refundsPresetMandate({
+          autoApproveCeilingUsd: ceiling,
+          hardCapUsd: hardCap,
+          maxDailyTotalUsd: daily,
+        });
+      } else if (workflow === "payments") {
+        const single = await askNum("Max single payment or transfer (USD)", 5000);
+        const daily = await askNum("Max daily payment total (USD)", 25000);
+        const approval = await askNum("Human-approval threshold (USD)", 2500);
+        const allowRaw = await ask("Known payees / counterparties (comma-separated, blank for none)", "");
+        const payeeAllowlist = allowRaw
+          .split(",")
+          .map((v) => v.trim())
+          .filter((v) => v !== "");
+        policy = paymentsPresetMandate({
+          maxSingleTransferUsd: single,
+          maxDailyTotalUsd: daily,
+          humanApprovalThresholdUsd: approval,
+          payeeAllowlist,
+        });
+      } else {
+        const actionTypes: ActionType[] = workflow === "procurement" ? ["procure"] : ["approve"];
+        const single = await askNum("Max single action value (USD)", workflow === "procurement" ? 5000 : 1000);
+        const daily = await askNum("Max daily total (USD)", workflow === "procurement" ? 25000 : 10000);
+        const approval = await askNum("Human-approval threshold (USD)", workflow === "procurement" ? 2500 : 500);
+        const requireNew = await askYesNo("Escalate first-time counterparty/vendor/account?", true);
+        policy = defaultPolicyMandate({
+          mandateId: `${workflow}-preset-${Date.now()}`,
+          allowedActionTypes: actionTypes,
+          maxSingleActionUsd: single,
+          maxDailyTotalUsd: daily,
+          humanApprovalThresholdUsd: approval,
+          requireApprovalForNewCounterparty: requireNew,
+          rateLimit: { maxActions: 60, windowSeconds: 60 },
+        });
+      }
+
+      const keypair = generateMandateKeypair();
+      const signed = signPolicyMandate(policy, keypair.privateKeyPem);
+      const cwd = process.cwd();
+      const mandatePath = resolve(cwd, "policy_mandate.json");
+      const signingKeyPath = resolve(cwd, "mandate_signing_key.pem");
+      const killFilePath = resolve(cwd, ".forge-agent-gate.kill");
+      writeFileSync(mandatePath, `${JSON.stringify(signed, null, 2)}\n`, "utf8");
+      writeFileSync(signingKeyPath, keypair.privateKeyPem, { mode: 0o600 });
+
+      const envLines = [
+        `FORGE_API_KEY=${forgeApiKey}`,
+        `FORGE_API_BASE_URL=${forgeBaseUrl}`,
+        `FORGE_TENANT_ID=${tenantId}`,
+        `FORGE_RECORD_MODE=${recordMode}`,
+        `AGENT_GATE_AGENT_ID=${agentId}`,
+        `AGENT_GATE_MANDATE_PATH=${mandatePath}`,
+        `AGENT_GATE_KILL_FILE=${killFilePath}`,
+      ];
+      const envPath = resolve(cwd, ".env");
+      writeFileSync(envPath, `${envLines.join("\n")}\n`, { mode: 0o600 });
+
+      const mcpConfig = {
+        mcpServers: {
+          "forge-agent-gate": {
+            command: "npx",
+            args: ["-y", "forge-agent-gate", "serve"],
+            env: {
+              FORGE_API_KEY: forgeApiKey,
+              FORGE_API_BASE_URL: forgeBaseUrl,
+              FORGE_TENANT_ID: tenantId,
+              FORGE_RECORD_MODE: recordMode,
+              AGENT_GATE_AGENT_ID: agentId,
+              AGENT_GATE_MANDATE_PATH: mandatePath,
+              AGENT_GATE_KILL_FILE: killFilePath,
+            },
+          },
+        },
+      };
+
+      console.log("\nDone.\n");
+      console.log(`  wrote  ${mandatePath}   (signed ${workflow} policy mandate)`);
+      console.log(`  wrote  ${signingKeyPath}   (ed25519 signing key - keep private, gitignored)`);
+      console.log(`  wrote  ${envPath}   (secrets - gitignored)`);
+      console.log(`  signature valid: ${verifyPolicyMandateSignature(signed)}`);
+      console.log("\nTo halt gated actions instantly at any time:");
+      console.log(`  touch ${killFilePath}`);
+      console.log("\nFirst MCP tool call: gate_action");
+      console.log(
+        JSON.stringify(
+          {
+            actionType: policy.allowedActionTypes[0] ?? "custom",
+            amountUsd: Math.min(policy.humanApprovalThresholdUsd || policy.maxSingleActionUsd, policy.maxSingleActionUsd),
+            counterparty: "example-counterparty",
+            resource: "example-resource",
+            dailyTotalUsd: 0,
+          },
+          null,
+          2,
+        ),
+      );
+      console.log("\n--- MCP config (paste into your client) ---");
+      console.log("Paste this server entry into your local MCP-compatible agent client.\n");
+      console.log(JSON.stringify(mcpConfig, null, 2));
+      console.log("");
+      return;
+    }
 
     // --- Venue credentials ---
     console.log("\n2) Venue credentials (stay LOCAL - never sent to Forge)\n");
