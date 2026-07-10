@@ -60,7 +60,7 @@ export function loadConfig(env: Env = process.env): AppConfig {
     recordMode: recordMode(env),
     tenantId: req(env, "FORGE_TENANT_ID"),
     agentId: opt(env, "AGENT_GATE_AGENT_ID") ?? "trading-agent",
-    agentVersion: opt(env, "AGENT_GATE_AGENT_VERSION") ?? "0.1.3",
+    agentVersion: opt(env, "AGENT_GATE_AGENT_VERSION") ?? "0.1.5",
     timeoutMs: Number(opt(env, "FORGE_TIMEOUT_MS") ?? "15000"),
   };
   if (apiKey) forge.apiKey = apiKey;

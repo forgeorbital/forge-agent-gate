@@ -330,7 +330,7 @@ Each decision is posted to `POST /v1/agentic/events/evaluate` with header
 ```jsonc
 {
   "agent_id": "trading-agent-prod-1",
-  "agent_version": "0.1.3",
+  "agent_version": "0.1.5",
   "tenant_id": "your-tenant",
   "client_id": "your-tenant",
   "integration_mode": "pre_action_gate",
