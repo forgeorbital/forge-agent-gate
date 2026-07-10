@@ -374,7 +374,7 @@ export function buildMcpServer(args: {
   const { config, policy, signatureValid, tradingMandate, gate } = args;
   const tradingEnabled = Boolean(tradingMandate && gate);
   const server = new Server(
-    { name: "com.forgeorbital/agent-gate", version: "0.1.5" },
+    { name: "com.forgeorbital/agent-gate", version: "0.1.6" },
     { capabilities: { tools: {} } },
   );
 
