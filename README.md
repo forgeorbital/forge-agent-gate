@@ -2,17 +2,50 @@
 
 [![forge-agent-gate MCP server](https://glama.ai/mcp/servers/forgeorbital/forge-agent-gate/badges/score.svg)](https://glama.ai/mcp/servers/forgeorbital/forge-agent-gate)
 
-Product page: https://forgeorbital.com/agent-gate
-Live demo: https://forgeorbital.com/agent-gate/demo
-Get an early-access API key: https://forgeorbital.com/agent-gate/pricing
+**A pre-action authorization gate for AI agents.** Before your agent does something irreversible (a payment, refund, delete, or trade), forge-agent-gate checks the proposed action against a policy you set and returns `allow`, `block`, or `escalate`. It is deterministic, runs in your own process, and writes a decision record you can actually read. MIT.
 
-> Do not want to read the docs? Paste the prompt in
-> [`llms-install.md`](./llms-install.md#ask-an-llm-to-wire-it-up) into your
-> coding assistant with the file that spends, refunds, approves, procures, or
-> trades. It contains the whole contract.
->
-> Prefer zero code? Run it as an MCP server and call the `gate_action` tool
-> before any consequential tool call.
+```bash
+npm i forge-agent-gate
+```
+
+### See it block something (local, no signup)
+
+```js
+import { generic, presets } from "forge-agent-gate";
+
+// A signed policy: transfers capped at $500, new payees need a human.
+const mandate = presets.paymentsPresetMandate({ maxSingleTransferUsd: 500 });
+
+// The agent proposes a $4,000 transfer. Over the cap.
+const decision = generic.enforceAction({
+  mandate,
+  action: { actionType: "transfer", amountUsd: 4000, counterparty: "acme-llc" },
+  activity: { dailyTotalUsd: 0, knownCounterparties: ["acme-llc"] },
+  now: new Date(),
+});
+
+console.log(decision.disposition.toUpperCase(), decision.reasons);
+```
+
+```text
+$4,000 transfer -> BLOCK
+   - Action magnitude $4000.00 exceeds cap $500.00.
+   - Action magnitude $4000.00 is at/above the human-approval threshold $2500.00.
+$50 transfer    -> ALLOW
+```
+
+Runnable in ten seconds: [`examples/blocked-over-cap.mjs`](./examples/blocked-over-cap.mjs) (`node examples/blocked-over-cap.mjs`). Local enforcement needs no key and no signup. It is pure and deterministic: same policy plus same action, same decision, every time.
+
+**Honest scope:** it takes no custody of your funds or keys, it is not a broker, and it gives no trading advice. It enforces the bounds you set and records the decision. It will not stop a bad but in-policy action.
+
+If it saves you a bad five minutes, a star on the repo helps other developers find it.
+
+---
+
+- Docs shortcut: paste the prompt in [`llms-install.md`](./llms-install.md#ask-an-llm-to-wire-it-up) into your coding assistant, along with the file that spends, refunds, approves, procures, or trades. It contains the whole contract.
+- Prefer zero code? Run it as an MCP server and call the `gate_action` tool before any consequential tool call.
+- Product page: https://forgeorbital.com/agent-gate
+- Optional hosted keys and a persistent, replayable proof archive you can show a teammate or an auditor later: https://forgeorbital.com/agent-gate/pricing
 
 Agent Gate is the self-serve developer on-ramp to Forge Orbital.
 
