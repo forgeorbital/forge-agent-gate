@@ -10,6 +10,8 @@ npm i forge-agent-gate
 
 ### See it block something (local, no signup)
 
+![forge-agent-gate blocking a $4,000 over-cap transfer and allowing a $50 one](./assets/demo-block.svg)
+
 ```js
 import { generic, presets } from "forge-agent-gate";
 
