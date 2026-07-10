@@ -9,8 +9,7 @@
  * record cannot be written, the gate converts an allow into a block.
  *
  * The request shape matches the Forge `AgenticEventRequest` contract exactly
- * (see the public OpenAPI schema: docs/openapi.latest.json →
- * components.schemas.AgenticEventRequest).
+ * (components.schemas.AgenticEventRequest in the Forge API OpenAPI schema).
  */
 
 import { sha256HexOfJson } from "./canonical.js";
